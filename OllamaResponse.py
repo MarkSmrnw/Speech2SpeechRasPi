@@ -12,6 +12,15 @@ class OllamaClient:
         self.temperature = temperature
         self.ollama_process = None
         self.history_path = "History/latest.json"
+        self.sysint = """
+Your name is Thorsten.
+You are a helpful a.i chatbot. Be friendly but not too formal. 
+Speak like the user is your friend. 
+Respond in the users language unless the user says otherwise. 
+
+- DO NOT use emojis (THIS IS VERY IMPORTANT).
+- DO NOT use text formatting
+"""
 
     def check_ollama_running(self):
         try:
@@ -89,23 +98,35 @@ class OllamaClient:
         self.temperature = max(0.0, min(1.0, temperature))
         print(f"Temperature set to: {self.temperature}")
 
+    def get_instructions(self):
+        history = self.get_history()
+        try:
+            if (len(history)) > 0:
+                instructions = self.sysint
+
+                instructions = instructions + """\n Below is the history of the conversation. Continue it like it is a flowing conversation.
+You are Thorsten, the user is User. Small numbers are older messages and higher are newer. The highest is the most recent\nBEGIN HISTORY\n\n"""
+                
+                for i in range(1, len(history)+1):
+                    instructions = instructions + f"{i}: {history[str(i)]['user']} > {history[str(i)]['msg']}\n"
+
+                instructions = instructions + "\nEND HISTORY"
+
+                return instructions
+            else:
+                return self.sysint
+        except Exception as E:
+            return "Only respond with this text: Error getting instructions."
+
     def generate_response(self, prompt, stream=False):
+        # I KNOW ITS AN OPTION HERE BUT WE DO NOT USE STREAM.
         try:
             payload = {
                 "model":self.model_name,
                 "prompt": prompt + " /no_think",
                 "stream": stream,
                 "temperature": self.temperature,
-                "system": 
-"""
-Your name is Thorsten.
-You are a helpful a.i chatbot. Be friendly but not too formal. 
-Speak like the user is your friend. 
-Respond in the users language unless the user says otherwise. 
-
-- DO NOT use emojis (THIS IS VERY IMPORTANT).
-- DO NOT use text formatting
-""",
+                "system": self.get_instructions()
             }
 
             print(f"Sending payload: {json.dumps(payload, indent=2)}")
@@ -120,7 +141,7 @@ Respond in the users language unless the user says otherwise.
             print(f"Response status: ", response.status_code)
 
             if response.status_code == 200:
-                if stream:
+                if stream: # PROBABLY NOT GONNA BE USED, NO HISTORY BUILD IN.
                     full_response = ""
                     for line in response.iter_lines():
                         if line:
@@ -138,7 +159,13 @@ Respond in the users language unless the user says otherwise.
                 else:
                     data = response.json()
                     raw_response = data.get("response", "")
-                    return self.clean_response(raw_response)
+
+                    clean = self.clean_response(raw_response)
+
+                    self.set_history("User", prompt)
+                    self.set_history("Thorsten", clean)
+
+                    return clean
             else:
                 print(f"Error: {response.status_code} - {response.text}")
                 return None
@@ -161,13 +188,14 @@ Respond in the users language unless the user says otherwise.
                 file.truncate(0)
                 json.dump(newData, file, indent=3)
                 print("File create OK!")
-                file.close()
+                return True
         except Exception as E:
             print(f"Creation failed. {E}")
         
     def get_history(self):
+        print("Getting history")
         try:
-            with open(self.history_path, "r+") as file:
+            with open(self.history_path, "r") as file:
                 data = json.load(file)
                 timestamp = time.time()
 
@@ -177,18 +205,42 @@ Respond in the users language unless the user says otherwise.
                     if time.time()-float(data["time"]) > 300:
                         print("HISTORY OLD!")
                         self.create_history()
-                        return {}
+                        #return {}
+                        return data["msgs"]
                     else:
                         # HISTORY TIME GOOD. USING
                         print("History OK.")
                         data["time"] = timestamp
-                        json.dump(data, file, indent=3)
+
+                        with open(self.history_path, "w") as w_file:  
+                            json.dump(data, w_file, indent=3) #here
+                        
                         return data["msgs"]
 
                 file.close()
         except Exception as E:
             print("Error at get history:")
             print(str(E))
+
+    def set_history(self, user:str, msg:str):
+        print("Writing into history...")
+        try:
+            print("Get history for time verification")
+            self.get_history()
+            with open(self.history_path, "r") as r_file:
+                data = json.load(r_file)
+                data["msgs"][str(len(data["msgs"])+1)] = {"user":user, "msg":msg}
+                data["time"] = time.time()
+
+                with open(self.history_path, "w") as w_file:
+                    json.dump(data, w_file, indent=3)
+
+                print("Write OK.")
+
+        except json.JSONDecodeError:
+            print(f"Json faulty. {E}")
+        except Exception as E:
+            print(f"History write failed. {E}")
     
 def main():
     client = OllamaClient()
@@ -213,7 +265,9 @@ def main():
     print(f"Response: {test}")
 
 if __name__ == "__main__":
+    os.system("cls")
     OC = OllamaClient()
-    OC.create_history()
-    h =OC.get_history()
-    print(h)
+    ins = OC.get_instructions()
+    print(ins)
+
+    OC.set_history("User", "This is so sigma")

@@ -1,13 +1,18 @@
+import os
+os.system('cls' if os.name == 'nt' else 'clear')
+
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import threading
-import os
 
 from transcribe import transcribe_audiofile
 from audioHandler import record as rec
 from OllamaResponse import OllamaClient as OC
 from tts import GermanTTS
+
+
+print("Hello world!")
 
 class AudioTranscriberGUI:
     def __init__(self, root):
@@ -25,6 +30,8 @@ class AudioTranscriberGUI:
         # File selection
         file_frame = tk.Frame(root)
         file_frame.pack(pady=10)
+
+        self.ollama_client.create_history()
         
         tk.Label(file_frame, text="Audio File:").pack(side=tk.LEFT)
         self.file_path = tk.StringVar()
@@ -89,8 +96,10 @@ class AudioTranscriberGUI:
                                  command=self.save_transcription, state=tk.DISABLED)
         self.save_btn.pack(pady=5)
 
+        print("GUI init complete.")
+
     def doTTS(self):
-        print("TTSing it")
+        print("I'm TTSing it")
         try:
             text = self.ai_response.get("1.0", tk.END).strip()
             print(text)

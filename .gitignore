@@ -2,3 +2,7 @@ __pycache__
 lib
 bin
 share
+pyvenv.cfg
+AudioFiles
+testAudio.ogg
+output.wav
